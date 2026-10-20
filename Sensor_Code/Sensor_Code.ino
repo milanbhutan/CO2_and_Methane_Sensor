@@ -1,6 +1,7 @@
 #include <Wire.h>
 #include <LiquidCrystal_I2C.h>
 //#include "BlueDot_BME280.h"
+#include <SoftwareSerial.h>
 #define TRIGGER_PIN 9
 #define ECHO_PIN 10
 #define A0 A0
