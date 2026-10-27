@@ -19,10 +19,10 @@ AN128_ardunio_cozir CO2 Demonstration code 11/29/2017 Runs on Ardunio UNO, MEGA 
 SoftwareSerial mySerial(12, 13); // RX, TX pins on Ardunio
 
 int co2 = 0;
-double multiplier = 1;// 1 for 2% =20000 PPM, 10 for 20% = 200,000 PPM
+double multiplier = 100;// 1 for 2% =20000 PPM, 10 for 20% = 200,000 PPM
 uint8_t buffer[25];
-uint8_t ind =0;
-uint8_t index =0;
+uint8_t ind = 0;
+uint8_t index = 8;
 
 int fill_buffer();  // function prototypes here
 int format_output();
@@ -31,7 +31,13 @@ void setup() {
   Serial.begin(9600);
   Serial.print("\n\n");
   Serial.println("             AN128 Ardunio to Cozir CO2 Sensor - Demonstration code 11/29/2017\n\n"); 
-  mySerial.begin(9600); // Start serial communications with sensor
+  mySerial.begin(9600); 
+  // delay(2000);
+  // mySerial.println("Z");
+  // fill_buffer();
+  // Serial.write(buffer, ind);
+  // Serial.println();
+  // Start serial communications with sensor
   //mySerial.println("K 0");  // Set Command mode
 
 
@@ -45,15 +51,15 @@ void loop() {
   mySerial.println("Z"); 
   fill_buffer();  // function call that reads CO2 sensor and fills buffer
  
-  Serial.print("Buffer contains: ");
+  Serial.print("Unfiltered CO2 Buffer contains: ");
   for(int j=0; j<ind; j++)Serial.print(buffer[j], HEX);
- index = 8;
- format_output();
-  Serial.print(" Raw PPM        ");
+  format_output();
+  Serial.println(" Raw PPM        ");
   
   mySerial.println("V");
-  fill_buffer();
-  index = 8;  // In ASCII buffer, filtered value is offset from raw by 8 bytes
+  fill_buffer(); // In ASCII buffer, filtered value is offset from raw by 8 bytes
+  Serial.print("Filtered CO2 Buffer contains: ");
+  for(int j=0; j<ind; j++)Serial.print(buffer[j], HEX);
   format_output();
   Serial.println(" Filtered PPM\n\n");
   i++;
@@ -77,15 +83,15 @@ while((buffer[ind-1] != 0x0A)){  // Read sensor and fill buffer up to 0XA = CR
   }
   // buffer() now filled with sensor ascii data
   // ind contains the number of characters loaded into buffer up to 0xA =  CR
-  ind = ind - 2; // decrement buffer to exactly match last numerical character
+  ind = ind - 2;// decrement buffer to exactly match last numerical character
   }
 
- int format_output(void){ // read buffer, extract 6 ASCII chars, convert to PPM and print
-  co2 = buffer[15-index]-0x30;
-  co2 = co2+((buffer[14-index]-0x30)*10);
-  co2 +=(buffer[13-index]-0x30)*100;
-  co2 +=(buffer[12-index]-0x30)*1000;
-  co2 +=(buffer[11-index]-0x30)*10000;
+ int format_output(void){ // read buffer, extract 5 ASCII chars, convert to PPM and print
+  co2 = buffer[6]-0x30;
+  co2 += (buffer[5]-0x30)*10;
+  co2 +=(buffer[4]-0x30)*100;
+  co2 +=(buffer[3]-0x30)*1000;
+  co2 +=(buffer[2]-0x30)*10000;
   Serial.print("\n CO2 = ");
   Serial.print(co2*multiplier,0);
 // Serial.print(" PPM,");
