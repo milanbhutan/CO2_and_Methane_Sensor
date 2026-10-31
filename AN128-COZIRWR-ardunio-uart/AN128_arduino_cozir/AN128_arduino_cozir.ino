@@ -16,7 +16,7 @@ AN128_ardunio_cozir CO2 Demonstration code 11/29/2017 Runs on Ardunio UNO, MEGA 
 */
 #include <SoftwareSerial.h>
 
-SoftwareSerial mySerial(12, 13); // RX, TX pins on Ardunio
+SoftwareSerial co2_serial(6, 7); // RX, TX pins on Ardunio
 
 int co2 = 0;
 double multiplier = 100;// 1 for 2% =20000 PPM, 10 for 20% = 200,000 PPM
@@ -31,14 +31,8 @@ void setup() {
   Serial.begin(9600);
   Serial.print("\n\n");
   Serial.println("             AN128 Ardunio to Cozir CO2 Sensor - Demonstration code 11/29/2017\n\n"); 
-  mySerial.begin(9600); 
-  // delay(2000);
-  // mySerial.println("Z");
-  // fill_buffer();
-  // Serial.write(buffer, ind);
-  // Serial.println();
-  // Start serial communications with sensor
-  //mySerial.println("K 0");  // Set Command mode
+  co2_serial.begin(9600); 
+ 
 
 
 
@@ -48,7 +42,7 @@ void setup() {
 int i = 0;
 
 void loop() {
-  mySerial.println("Z"); 
+  co2_serial.println("Z"); 
   fill_buffer();  // function call that reads CO2 sensor and fills buffer
  
   Serial.print("Unfiltered CO2 Buffer contains: ");
@@ -56,7 +50,7 @@ void loop() {
   format_output();
   Serial.println(" Raw PPM        ");
   
-  mySerial.println("V");
+  co2_serial.println("V");
   fill_buffer(); // In ASCII buffer, filtered value is offset from raw by 8 bytes
   Serial.print("Filtered CO2 Buffer contains: ");
   for(int j=0; j<ind; j++)Serial.print(buffer[j], HEX);
@@ -70,14 +64,14 @@ void loop() {
 int fill_buffer(void){
 // Read the first byte
 ind = 0;
-while(!mySerial.available());
-buffer[ind] = mySerial.read();
+while(!co2_serial.available());
+buffer[ind] = co2_serial.read();
 ind++;
 
 // Fill buffer with sensor ascii data
 while((buffer[ind-1] != 0x0A)){  // Read sensor and fill buffer up to 0XA = CR
-  if(mySerial.available()){
-    buffer[ind] = mySerial.read();
+  if(co2_serial.available()){
+    buffer[ind] = co2_serial.read();
     ind++;
     } 
   }
