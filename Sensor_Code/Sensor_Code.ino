@@ -19,21 +19,26 @@ Adafruit_BME280 bme2; // Sensor 2
 
 LiquidCrystal_I2C lcd1(0x27, 16, 2); // I2C address 0x27, 16 column and 2 rows
 LiquidCrystal_I2C lcd2(0x26, 16, 2); // I2C address 0x27, 16 column and 2 rows
+LiquidCrystal_I2C lcd3(0x25, 16, 2); // I2C address 0x25, 16 column and 2 rows
 
 SoftwareSerial co2_serial(6, 7);
 SoftwareSerial methane(12, 13);
 
 void co2_read();
 void methane_read();
-int fill_buffer(); 
-int format_output();
 
-//CO2 Sensor
-int co2 = 0;
-double multiplier = 100;// 1 for 2% =20000 PPM, 10 for 20% = 200,000 PPM
+bool fill_buffer(void);
+bool read_co2_value(char command, uint32_t &value);
+
+void format_co2_output(uint32_t raw);
+void format_temperature_output(uint32_t raw);
+void format_humidity_output(uint32_t raw);
+void format_pressure_output(uint32_t raw);
+
+// CO2 sensor
+double multiplier = 0.0;
 uint8_t buffer[25];
 uint8_t ind = 0;
-uint8_t index = 8;
 
 //Methane Sensor
 const uint8_t request[] = {0x11, 0x01, 0x01, 0xED};
@@ -275,36 +280,7 @@ Serial.begin(9600);
 // //Ping
 //   pinMode(TRIGGER_PIN, OUTPUT);
 //   pinMode(ECHO_PIN, INPUT);
-// //Methane
-//   float sensor_volt = 0;
-//   float RL = 20.0;        // Load resistance in kilo-ohms (10 or 20 kohm)
-//   float VCC = 5.0;        // Supply voltage of 5V from Arduino
-//   float RS_air = 0;       // Rs in clean air
-//   float R0 = 0;           // Baseline Rs (used as R0)
-//   float sensorValue = 0;
 
-//   // --- Averaging 100 analog readings for better stability ---
-//   for (int x = 0; x < 100; x++) {
-//     sensorValue += analogRead(A0);
-//   }
-//   sensorValue = sensorValue / 100.0;
-
-//   // --- Convert ADC value to voltage ---
-//   sensor_volt = (sensorValue / 1024.0) * VCC;
-
-//   // --- Calculate Rs using the voltage divider formula ---
-//   RS_air = RL * (VCC - sensor_volt) / sensor_volt;
-
-//   // --- Save Rs in clean air as R0 ---
-//   R0 = RS_air; /*part of an old code to use RO. Wanted to keep option*/
-
-//   Serial.print("Sensor Voltage: ");
-//   Serial.print(sensor_volt);
-//   Serial.println(" V");
-
-//   Serial.print("Rs: ");
-//   Serial.print(R0);
-//   Serial.println(" kohms");
 
 // //LCD
 //   lcd1.init(); // initialize the lcd
@@ -325,16 +301,27 @@ Serial.begin(9600);
 //   lcd2.clear();
 //   delay(2000);
 
+  lcd3.init(); // initialize the lcd
+  lcd3.backlight();
+  lcd3.clear();                 // clear display
+  lcd3.setCursor(0, 0);         // move cursor to   (0, 0)
+  lcd3.print("hi again :)");
+  delay(2000);
+  lcd3.clear();
+  delay(2000);
+
 }
 void loop() {
   // put your main code here, to run repeatedly:
- while(0){
-  // Methane Sensor Reading
-  methane_read();
- }
-
  while(1){
+  // Methane Sensor Reading
+  methane.listen();
+  methane_read();
+ 
+
+ 
   // CO2 Sensor Reading
+  co2_serial.listen();
   co2_read();
 
  }
@@ -501,54 +488,158 @@ void methane_read(){
   delay(1000);
 }
 
-void co2_read(){
-co2_serial.println("Z"); 
-fill_buffer();  // function call that reads CO2 sensor and fills buffer
+void co2_read() {
+  uint32_t raw;
 
-Serial.print("Unfiltered CO2 Buffer contains: ");
-for(int j=0; j<ind; j++)Serial.print(buffer[j], HEX);
-format_output();
-Serial.println(" Raw PPM        ");
+  // Ask the sensor for its CO2-to-ppm multiplier.
+  // A returned multiplier code of 0 means 0.1.
+  bool have_multiplier = read_co2_value('.', raw);
 
-co2_serial.println("V");
-fill_buffer(); // In ASCII buffer, filtered value is offset from raw by 8 bytes
-Serial.print("Filtered CO2 Buffer contains: ");
-for(int j=0; j<ind; j++)Serial.print(buffer[j], HEX);
-format_output();
-Serial.println(" Filtered PPM\n\n");
+  if (have_multiplier) {
+    multiplier = (raw == 0) ? 0.1 : (double)raw;
+  }
 
-delay(1000);
+  // Z = filtered CO2.
+  if (read_co2_value('Z', raw)) {
+    if (have_multiplier) {
+      format_co2_output(raw);
+    } else {
+      Serial.println(F("CO2: multiplier read failed"));
+    }
+  }
+
+  // Lowercase t = onboard temperature sensor.
+  if (read_co2_value('t', raw)) {
+    format_temperature_output(raw);
+  }
+
+  if (read_co2_value('H', raw)) {
+    format_humidity_output(raw);
+  }
+
+  if (read_co2_value('B', raw)) {
+    format_pressure_output(raw);
+  }
+
+  Serial.println();
+  delay(1000);
 }
 
-int fill_buffer(void){
-// Read the first byte
-ind = 0;
-while(!co2_serial.available());
-buffer[ind] = co2_serial.read();
-ind++;
 
-// Fill buffer with sensor ascii data
-while((buffer[ind-1] != 0x0A)){  // Read sensor and fill buffer up to 0XA = CR
-  if(co2_serial.available()){
-    buffer[ind] = co2_serial.read();
-    ind++;
-    } 
-  }
-  // buffer() now filled with sensor ascii data
-  // ind contains the number of characters loaded into buffer up to 0xA =  CR
-  ind = ind - 2;// decrement buffer to exactly match last numerical character
+bool read_co2_value(char command, uint32_t &value) {
+  // Clear leftover data before requesting another reading.
+  while (co2_serial.available()) {
+    co2_serial.read();
   }
 
- int format_output(void){ // read buffer, extract 5 ASCII chars, convert to PPM and print
-  co2 = buffer[6]-0x30;
-  co2 += (buffer[5]-0x30)*10;
-  co2 +=(buffer[4]-0x30)*100;
-  co2 +=(buffer[3]-0x30)*1000;
-  co2 +=(buffer[2]-0x30)*10000;
-  Serial.print("\n CO2 = ");
-  Serial.print(co2*multiplier,0);
-// Serial.print(" PPM,");
-//    Serial.print("\n");
-  delay(200);
- }
+  co2_serial.println(command);
+
+  if (!fill_buffer()) {
+    Serial.print(F("MX200 "));
+    Serial.print(command);
+    Serial.println(F(": incomplete response or response too long"));
+    return false;
+  }
+
+  // Expected response: command + space + five digits.
+  // Example: H 00351
+  if (ind != 7 ||
+      buffer[0] != (uint8_t)command ||
+      buffer[1] != ' ') {
+    Serial.print(F("MX200 "));
+    Serial.print(command);
+    Serial.println(F(": unexpected response"));
+    return false;
+  }
+
+  uint32_t parsed = 0;
+
+  for (uint8_t j = 2; j < 7; j++) {
+    if (buffer[j] < '0' || buffer[j] > '9') {
+      Serial.print(F("MX200 "));
+      Serial.print(command);
+      Serial.println(F(": invalid numeric response"));
+      return false;
+    }
+
+    parsed = parsed * 10UL + (buffer[j] - '0');
+  }
+
+  value = parsed;
+  return true;
+}
+
+
+bool fill_buffer(void) {
+  ind = 0;
+  buffer[0] = '\0';
+
+  unsigned long started = millis();
+
+  while (millis() - started < 1000UL) {
+    if (!co2_serial.available()) {
+      continue;
+    }
+
+    char received = (char)co2_serial.read();
+
+    if (received == '\r') {
+      continue;
+    }
+
+    if (received == '\n') {
+      if (ind == 0) {
+        continue;
+      }
+
+      buffer[ind] = '\0';
+      return true;
+    }
+
+    if (ind >= sizeof(buffer) - 1) {
+      return false;
+    }
+
+    buffer[ind++] = (uint8_t)received;
+  }
+
+  return false;
+}
+
+
+void format_co2_output(uint32_t raw) {
+  double ppm = (double)raw * multiplier;
+
+  Serial.print(F("CO2 (filtered): "));
+  Serial.print(ppm, multiplier < 1.0 ? 1 : 0);
+  Serial.println(F(" ppm"));
+}
+
+
+void format_temperature_output(uint32_t raw) {
+  // Convert to signed before subtracting for negative temperatures.
+  double temperature_c = ((int32_t)raw - 1000L) / 10.0;
+
+  Serial.print(F("Temperature: "));
+  Serial.print(temperature_c, 1);
+  Serial.println(F(" C"));
+}
+
+
+void format_humidity_output(uint32_t raw) {
+  double humidity_percent = raw / 10.0;
+
+  Serial.print(F("Humidity: "));
+  Serial.print(humidity_percent, 1);
+  Serial.println(F(" % RH"));
+}
+
+
+void format_pressure_output(uint32_t raw) {
+  double pressure_mbar = raw / 10.0;
+
+  Serial.print(F("Pressure: "));
+  Serial.print(pressure_mbar, 1);
+  Serial.println(F(" mbar"));
+}
 
