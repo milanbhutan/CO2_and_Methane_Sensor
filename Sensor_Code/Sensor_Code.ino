@@ -8,6 +8,10 @@
 #include <Adafruit_Sensor.h>
 #include <Adafruit_BME280.h>
 
+unsigned long start_time = millis();
+unsigned long reading_time = 0;
+unsigned long time_since_boot = 0;
+
 Adafruit_BME280 bme1; // Sensor 1
 Adafruit_BME280 bme2; // Sensor 2
 
@@ -313,18 +317,25 @@ Serial.begin(9600);
 }
 void loop() {
   // put your main code here, to run repeatedly:
- while(1){
+ 
   // Methane Sensor Reading
+  while(1){
   methane.listen();
   methane_read();
- 
-
  
   // CO2 Sensor Reading
   co2_serial.listen();
   co2_read();
-
- }
+  reading_time = millis();
+  time_since_boot = reading_time - start_time;
+  time_since_boot = float(time_since_boot)/1000;
+  Serial.print("Time Since Boot: ");
+  Serial.print(time_since_boot);
+  Serial.println(" seconds");
+  Serial.println();
+  delay(1000);
+  }
+ 
 
 
 //Ping
@@ -371,30 +382,13 @@ void loop() {
   //lcd1.print(temperature1);
 
 
-///Methane
-  float sensor_volt = 0;
-  float RL = 20.0;        // Load resistance in kilo-ohms (10 or 20 kohm)
-  float VCC = 5.0;        // Supply voltage of 5V from Arduino
-  float RS_air = 0;       // Rs in clean air
-  float R0 = 0;           // Baseline Rs (used as R0)
-  float sensorValue = 0;
-  sensorValue = analogRead(A0);
-
-  // --- Convert ADC value to voltage ---
-  sensor_volt = (sensorValue / 1023.0) * VCC;
-
-  // --- Calculate Rs using the voltage divider formula ---
-  RS_air = RL * ((VCC - sensor_volt) / sensor_volt);
-
-  // --- Save Rs in clean air as R0 ---
-  R0 = RS_air;
 
 
   lcd2.clear();                 // clear display
   lcd2.setCursor(0, 0);         // move cursor to   (0, 0)
   lcd2.print("R:");        // print message at (0, 0)
   lcd2.setCursor(2, 0);         // move cursor to   (2, 0)
-  lcd2.print(R0,2); // print message at (2, 1)*/
+  //lcd2.print(R0,2); // print message at (2, 1)*/
 
 
   // float temperature2 = bme2.readTemperature();
@@ -437,9 +431,9 @@ void loop() {
   Serial.println(" hPa");
   Serial.println("----");
   Serial.print("MQ-4 Sensor Resistance: ");
-  Serial.print(R0);
+  //Serial.print(R0);
   Serial.print(" kohms, Sensor Voltage: ");
-  Serial.print(sensor_volt);
+  //Serial.print(sensor_volt);
   Serial.println(" V");
   Serial.println("-------------------");
   delay(2000); // Wait 2 seconds
@@ -455,13 +449,13 @@ void methane_read(){
 
   size_t received = methane.readBytes(reply, sizeof(reply));
 
-  Serial.print("RX: ");
-  for (size_t j = 0; j < received; j++) {
-    if (reply[j] < 0x10) Serial.print('0');
-    Serial.print(reply[j], HEX);
-    Serial.print(' ');
-  }
-  Serial.println();
+  // Serial.print("RX: ");
+  // for (size_t j = 0; j < received; j++) {
+  //   if (reply[j] < 0x10) Serial.print('0');
+  //   Serial.print(reply[j], HEX);
+  //   Serial.print(' ');
+  // }
+  // Serial.println();
 
   if (received != 8) {
     Serial.println("Missing or incomplete response");
@@ -485,7 +479,6 @@ void methane_read(){
     }
   }
 
-  delay(1000);
 }
 
 void co2_read() {
@@ -521,8 +514,6 @@ void co2_read() {
     format_pressure_output(raw);
   }
 
-  Serial.println();
-  delay(1000);
 }
 
 
